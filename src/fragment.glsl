@@ -66,7 +66,7 @@ struct HitData {
 // Scene objects
 Sphere spheres[1];          // glass sphere
 Sphere lightSphere;
-Box   boxes[1]; // adding one table box
+Box boxes[2]; // adding one table box and net box
 
 // Initialize scene objects
 void initScene(float time) {
@@ -104,10 +104,18 @@ void initScene(float time) {
     boxes[0] = Box(
         vec3(0.0, 0.0, 0.0),
         vec3(1.37, 0.05, 0.7625),     
-        vec3(0.0, 3, 0.05),
+        vec3(0.0, 0.9, 0.05),
+        MATERIAL_REFRACTIVE,
+        0.0
+    );
+    boxes[1] = Box(
+        vec3(0.0,0.12625, 0.0),
+        vec3(0.005, 0.07625, 0.7625),
+        vec3(0.1,0.1,0.1),
         MATERIAL_DIFFUSE,
         0.0
     );
+
 }
 
 /*
@@ -221,7 +229,7 @@ HitData traceScene(Ray ray, bool includeLightSphere) {
     */
 
     // Box intersections
-    for (int i = 0; i < 1; i++) {
+    for (int i = 0; i < 2; i++) {
         float t;
         if (intersectBox(ray, boxes[i], t)) {
             if (t < closest.t) {
@@ -287,7 +295,7 @@ vec3 trace(Ray ray, int maxDepth) {
             color += attenuation * lightHit.color;
             break;
         }
-        */
+*/
 
         HitData hit = traceScene(ray, false);
 
