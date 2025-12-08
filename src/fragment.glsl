@@ -16,6 +16,14 @@ uniform vec3 u_camUp;
 // Element controls
 uniform vec3  u_centerLightColor;
 uniform float u_centerLightBrightness;
+uniform float u_leftPaddleY;
+uniform float u_rightPaddleY;
+uniform vec2  u_ballPos;
+uniform float u_ballRadius;
+uniform sampler2D u_iceHeightMap;
+uniform sampler2D u_iceNormalMap;
+uniform float    u_iceBumpStrength;
+uniform float    u_iceNormalBlend;
 
 out vec4 fragColor;
 
@@ -64,71 +72,77 @@ struct HitData {
 };
 
 // Scene objects
-Sphere spheres[1];          // glass sphere
-Sphere lightSphere;
-Box boxes[3]; // adding one table box, net box and a white stripe along the table
+Sphere spheres[1];          // ball sphere
+Sphere lightSphere;         // not using rn
+Box boxes[4];               // left paddle, right paddle, top/bottom bounds
+Box iceFloor;               // reflective ice floor
 
 // Initialize scene objects
 void initScene(float time) {
 
-    /*
-    // Center light sphere
-    vec3 centerCol = clamp(u_centerLightColor, 0.0, 1.0) * u_centerLightBrightness;
-    lightSphere = Sphere(
-        vec3(0.0),
-        1.5,
-        centerCol,
-        MATERIAL_LIGHT,
+    // Ball
+    spheres[0] = Sphere(
+        vec3(u_ballPos, 0.0),
+        u_ballRadius,
+        vec3(1.0, 0.3, 0.3),
+        MATERIAL_DIFFUSE,
         0.0,
         1.0
     );
 
-    // Glass sphere
-    float glassOrbitR = 3.0;
-    float glassAngle = time * 0.4;
-    vec3 sCenter = vec3(
-        glassOrbitR * cos(glassAngle + 2.1),
-        0.0,
-        glassOrbitR * sin(glassAngle + 2.1)
-    );
-    spheres[0] = Sphere(
-        sCenter,
-        0.8,
-        vec3(0.9, 0.95, 1.0),
-        MATERIAL_REFRACTIVE,
-        0.1,
-        1.5
-    );
-    */
-
-    //ping pong table
+    // Left paddle (AI Opponent)
     boxes[0] = Box(
-        vec3(0.0, 0.0, 0.0),
-        vec3(1.37, 0.05, 0.7625),     
-        vec3(0.0, 0.9, 0.05),
-        MATERIAL_REFRACTIVE,
-        0.0
-    );
-    //table net
-    boxes[1] = Box(
-        vec3(0.0,0.12625, 0.0),
-        vec3(0.005, 0.07625, 0.7625),
-        vec3(0.1,0.1,0.1),
-        MATERIAL_REFRACTIVE,
-        0.0
-    );
-    //white stripe
-    boxes[2] = Box(
-        vec3(0.0,0.05, 0.0),
-        vec3(1.37, 0.001, 0.01),
-        vec3(1.0,1.0,1.0),
+        vec3(-4.5, u_leftPaddleY, 0.0),
+        vec3(0.05, 0.5, 0.2),
+        vec3(0.8, 0.8, 0.8),
         MATERIAL_DIFFUSE,
         0.0
     );
 
+    // Right paddle (player)
+    boxes[1] = Box(
+        vec3(4.5, u_rightPaddleY, 0.0),
+        vec3(0.05, 0.5, 0.2),
+        vec3(0.8, 0.8, 0.8),
+        MATERIAL_DIFFUSE,
+        0.0
+    );
+
+    // Bound boards top and bottom
+    float boardTop = 3.25;
+    float boardBottom = -3.25;
+    float boardHalfWidth = 4.5;
+    float borderHalfThickness = 0.25;
+
+    // Top border
+    boxes[2] = Box(
+        vec3(0.0, boardTop + borderHalfThickness, 0.0),
+        vec3(boardHalfWidth + 1.0, borderHalfThickness, 0.25),
+        vec3(0.0, 0.0, 0.0),
+        MATERIAL_DIFFUSE,
+        0.0
+    );
+
+    // Bottom border
+    boxes[3] = Box(
+        vec3(0.0, boardBottom - borderHalfThickness, 0.0),
+        vec3(boardHalfWidth + 1.0, borderHalfThickness, 0.25),
+        vec3(0.0, 0.0, 0.0),
+        MATERIAL_DIFFUSE,
+        0.0
+    );
+
+    // Ice floor
+    iceFloor = Box(
+        vec3(0.0, 0.0, -0.8),
+        vec3(boardHalfWidth + 1.0, (boardTop - boardBottom) * 0.55, 0.6),
+        vec3(0.1, 0.45, 0.8),
+        MATERIAL_REFLECTIVE,
+        0.6
+    );
+
 }
 
-/*
 // Sphere intersection
 bool intersectSphere(Ray ray, Sphere sphere, out float t) {
     vec3 oc = ray.origin - sphere.center;
@@ -154,7 +168,6 @@ bool intersectSphere(Ray ray, Sphere sphere, out float t) {
     }
     return true;
 }
-*/
 
 // Box intersection
 bool intersectBox(Ray ray, Box box, out float tOut) {
@@ -213,6 +226,38 @@ vec3 boxNormalAtPoint(vec3 p, Box box) {
     return n;
 }
 
+// Ice floor displacement texture
+float iceHeight(vec2 p) {
+    // Tile across floor
+    vec2 uv = fract(p * 0.25);
+    float hTex = texture(u_iceHeightMap, uv).r; // 0,1
+    return hTex * 2.0 - 1.0; // remap to -1,1
+}
+
+vec3 iceBumpNormal(vec3 worldPos) {
+    vec2 p = worldPos.xy * 0.6;
+    float eps = 0.05;
+    float hC = iceHeight(p);
+    float hX1 = iceHeight(p + vec2(eps, 0.0));
+    float hX2 = iceHeight(p - vec2(eps, 0.0));
+    float hY1 = iceHeight(p + vec2(0.0, eps));
+    float hY2 = iceHeight(p - vec2(0.0, eps));
+
+    float dhdx = (hX1 - hX2) / (2.0 * eps);
+    float dhdy = (hY1 - hY2) / (2.0 * eps);
+
+    float bumpStrength = u_iceBumpStrength;
+    vec3 n = normalize(vec3(-dhdx * bumpStrength, -dhdy * bumpStrength, 1.0));
+
+    vec2 uv = fract(worldPos.xy * 0.25);
+    vec3 nTex = texture(u_iceNormalMap, uv).xyz * 2.0 - 1.0;
+    nTex = normalize(nTex);
+
+    // Blend height normal and normal map normal
+    n = normalize(mix(n, nTex, u_iceNormalBlend));
+    return n;
+}
+
 HitData traceScene(Ray ray, bool includeLightSphere) {
     HitData closest;
     closest.hit = false;
@@ -239,7 +284,7 @@ HitData traceScene(Ray ray, bool includeLightSphere) {
     */
 
     // Box intersections
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
         float t;
         if (intersectBox(ray, boxes[i], t)) {
             if (t < closest.t) {
@@ -256,26 +301,40 @@ HitData traceScene(Ray ray, bool includeLightSphere) {
             }
         }
     }
-/*
-    // Glass sphere intersection
-    for (int i = 0; i < 1; i++) {
-        float t;
-        if (intersectSphere(ray, spheres[i], t)) {
-            if (t < closest.t) {
-                closest.hit = true;
-                closest.t = t;
-                closest.point = ray.origin + t * ray.direction;
-                vec3 n = normalize(closest.point - spheres[i].center);
-                closest.frontFace = dot(ray.direction, n) < 0.0;
-                closest.normal = closest.frontFace ? n : -n;
-                closest.color = spheres[i].color;
-                closest.material = spheres[i].material;
-                closest.reflectivity = spheres[i].reflectivity;
-                closest.refractiveIndex = spheres[i].refractiveIndex;
-            }
+
+    // Ball sphere intersection
+    float tBall;
+    if (intersectSphere(ray, spheres[0], tBall)) {
+        if (tBall < closest.t) {
+            closest.hit = true;
+            closest.t = tBall;
+            closest.point = ray.origin + tBall * ray.direction;
+            vec3 n = normalize(closest.point - spheres[0].center);
+            closest.frontFace = dot(ray.direction, n) < 0.0;
+            closest.normal = closest.frontFace ? n : -n;
+            closest.color = spheres[0].color;
+            closest.material = spheres[0].material;
+            closest.reflectivity = spheres[0].reflectivity;
+            closest.refractiveIndex = spheres[0].refractiveIndex;
         }
     }
-    */
+
+    // Ice floor intersection
+    float tFloor;
+    if (intersectBox(ray, iceFloor, tFloor)) {
+        if (tFloor < closest.t) {
+            closest.hit = true;
+            closest.t = tFloor;
+            closest.point = ray.origin + tFloor * ray.direction;
+            vec3 n = iceBumpNormal(closest.point);
+            closest.frontFace = dot(ray.direction, n) < 0.0;
+            closest.normal = closest.frontFace ? n : -n;
+            closest.color = iceFloor.color;
+            closest.material = iceFloor.material;
+            closest.reflectivity = iceFloor.reflectivity;
+            closest.refractiveIndex = 1.0;
+        }
+    }
 
     return closest;
 }
@@ -311,9 +370,7 @@ vec3 trace(Ray ray, int maxDepth) {
 
         if (!hit.hit) {
             // No hit
-            vec3 unitDir = normalize(ray.direction);
-            float tEnv = 0.5 * (unitDir.y + 1.0);
-            vec3 skyColor = mix(vec3(0.05, 0.05, 0.1), vec3(0.4, 0.7, 1.0), tEnv);
+            vec3 skyColor = vec3(0.047, 0.047, 0.047);
             color += attenuation * skyColor;
             break;
         }
@@ -368,7 +425,15 @@ vec3 trace(Ray ray, int maxDepth) {
             ray = Ray(hit.point + direction * 0.001, direction);
             attenuation *= hit.color;
 
+        } else if (hit.material == MATERIAL_REFLECTIVE) {
+            // Ice floor
+            vec3 glowColor = u_centerLightColor * u_centerLightBrightness * 0.15;
+            color += attenuation * (0.02 * directLight + 0.02 * ambientLight + glowColor);
+            attenuation *= hit.reflectivity;
+            ray = Ray(hit.point + hit.normal * 0.001, reflect(ray.direction, hit.normal));
+
         } else {
+            // Fallback for other reflective materials
             color += attenuation * (0.02 * directLight + 0.02 * ambientLight);
             attenuation *= hit.reflectivity;
             ray = Ray(hit.point + hit.normal * 0.001, reflect(ray.direction, hit.normal));

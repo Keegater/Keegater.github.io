@@ -57,6 +57,34 @@ temp text</p>
             throw new Error('WebGL 2 not supported');
         }
         
+        // Ice textures: displacement and normal map)
+        const iceHeightTex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, iceHeightTex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0,
+            gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([128, 128, 255, 255]));
+
+        const iceNormalTex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, iceNormalTex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0,
+            gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([128, 128, 255, 255]));
+
+        function loadIceTexture(tex, url) {
+            const img = new Image();
+            img.onload = function() {
+                gl.bindTexture(gl.TEXTURE_2D, tex);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+                gl.generateMipmap(gl.TEXTURE_2D);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+            };
+            img.src = url;
+        }
+
+        // Load ice textures
+        loadIceTexture(iceHeightTex, '../resources/Blue_Ice_001_DISP.png');
+        loadIceTexture(iceNormalTex, '../resources/Blue_Ice_001_NORM.jpg');
 
         const vertexShaderSource = await fetch('vertex.glsl').then((res) => {
             if (!res.ok) {
@@ -74,11 +102,46 @@ temp text</p>
         let program, positionLocation, resolutionLocation, timeLocation, maxBouncesLocation, ambientStrengthLocation;
         let camPosLocation, camForwardLocation, camRightLocation, camUpLocation;
         let centerLightColorLocation, centerLightBrightnessLocation;
+        let leftPaddleYLocation, rightPaddleYLocation;
+        let ballPosLocation, ballRadiusLocation;
+        let iceHeightMapLocation, iceNormalMapLocation;
+        let iceBumpStrengthLocation, iceNormalBlendLocation;
         let vao, positionBuffer;
 
         // Central light UI
         let centerLightColor = [0.56, 1.0, 1.0];
         let centerLightBrightness = 0.80; // 0 -> 10
+
+        // Paddle positions (center = 0)
+        let leftPaddleY = 0.0;
+        let rightPaddleY = 0.0;
+
+        // Paddle input states (smooth movement)
+        let rightPaddleUpPressed = false;
+        let rightPaddleDownPressed = false;
+
+        // Ball state
+        let ballPosX = 0.0;
+        let ballPosY = 0.0;
+        let ballVelX = 4.0;
+        let ballVelY = 2.0;
+        const ballRadius = 0.12;
+
+        // Ice floor tuning
+        let iceBumpStrength = 0.05;
+        let iceNormalBlend = 0.14;
+
+        // Board data
+        const boardTop = 3.25;
+        const boardBottom = -3.25;
+        const leftPaddleX = -4.5;
+        const rightPaddleX = 4.5;
+        const paddleHalfHeight = 0.5;
+        const paddleHalfWidth = 0.05;
+        const ballOutX = 6.0;
+
+        let lastTime = 0;
+        let lastTimeInitialized = false;
 
         function createShader(gl, type, source) {
             const shader = gl.createShader(type);
@@ -148,6 +211,26 @@ temp text</p>
                 centerLightColorLocation = gl.getUniformLocation(program, 'u_centerLightColor');
                 centerLightBrightnessLocation = gl.getUniformLocation(program, 'u_centerLightBrightness');
 
+                // Paddle uniforms
+                leftPaddleYLocation = gl.getUniformLocation(program, 'u_leftPaddleY');
+                rightPaddleYLocation = gl.getUniformLocation(program, 'u_rightPaddleY');
+
+                // Ball uniforms
+                ballPosLocation = gl.getUniformLocation(program, 'u_ballPos');
+                ballRadiusLocation = gl.getUniformLocation(program, 'u_ballRadius');
+
+                // Ice texture uniforms
+                iceHeightMapLocation = gl.getUniformLocation(program, 'u_iceHeightMap');
+                iceNormalMapLocation = gl.getUniformLocation(program, 'u_iceNormalMap');
+                iceBumpStrengthLocation = gl.getUniformLocation(program, 'u_iceBumpStrength');
+                iceNormalBlendLocation = gl.getUniformLocation(program, 'u_iceNormalBlend');
+
+                // Bind samplers to texture units 0 and 1
+                if (iceHeightMapLocation) gl.uniform1i(iceHeightMapLocation, 0);
+                if (iceNormalMapLocation) gl.uniform1i(iceNormalMapLocation, 1);
+                if (iceBumpStrengthLocation) gl.uniform1f(iceBumpStrengthLocation, iceBumpStrength);
+                if (iceNormalBlendLocation) gl.uniform1f(iceNormalBlendLocation, iceNormalBlend);
+
                 initBuffers();
             } catch (e) {
                 console.error(e);
@@ -163,9 +246,9 @@ temp text</p>
 
         // Camera state (spherical coordinates)
         let camTarget = [0.0, 0.0, 0.0];
-        let camRadius = 5.0;   // distance from center
+        let camRadius = 12.0;   // distance from center
         let camTheta = 0.0;    // horizontal angle (rads)
-        let camPhi = 0.3;      // vertical angle (rads)
+        let camPhi = 0.0;      // vertical angle (rads)
 
         // Vector helpers
         function normalize3(v) {
@@ -223,6 +306,9 @@ temp text</p>
         const controls = document.createElement('div');
         controls.className = 'controls';
 
+        // Camera lock state
+        let cameraLocked = false;
+
         // Max bounce slider
         const bouncesLabel = document.createElement('label');
         bouncesLabel.textContent = 'Max bounces ';
@@ -251,6 +337,29 @@ temp text</p>
 
         controls.appendChild(bouncesLabel);
         controls.appendChild(ambientLabel);
+
+        // Camera lock toggle
+        const cameraLockLabel = document.createElement('label');
+        const cameraLockCheckbox = document.createElement('input');
+        cameraLockCheckbox.type = 'checkbox';
+        cameraLockCheckbox.checked = false;
+        cameraLockLabel.appendChild(cameraLockCheckbox);
+        cameraLockLabel.appendChild(document.createTextNode(' Camera lock'));
+        controls.appendChild(cameraLockLabel);
+
+        cameraLockCheckbox.addEventListener('change', () => {
+            cameraLocked = cameraLockCheckbox.checked;
+        });
+
+        // Camera home button
+        const cameraHomeButton = document.createElement('button');
+        cameraHomeButton.textContent = 'Camera Home';
+        cameraHomeButton.addEventListener('click', () => {
+            camRadius = 12.0;
+            camTheta = 0.0;
+            camPhi = 0.0;
+        });
+        controls.appendChild(cameraHomeButton);
 
         // Light sphere color & brightness controls
         function addOrbitLightSlider(labelText, min, max, value, onChange) {
@@ -308,6 +417,7 @@ temp text</p>
         //------------- Might use later?? Commented out for now ------------------
 
         canvas.addEventListener('mousedown', (e) => {
+            if (cameraLocked) return;
             isDragging = true;
             lastMouseX = e.clientX;
             lastMouseY = e.clientY;
@@ -318,7 +428,7 @@ temp text</p>
         });
 
         window.addEventListener('mousemove', (e) => {
-            if (!isDragging) return;
+            if (!isDragging || cameraLocked) return;
             const dx = e.clientX - lastMouseX;
             const dy = e.clientY - lastMouseY;
             lastMouseX = e.clientX;
@@ -334,19 +444,89 @@ temp text</p>
             if (camPhi < minPhi) camPhi = minPhi;
         });
 
-        // Zoom controls
+        // Paddle controls
         window.addEventListener('keydown', (e) => {
-            const zoomSpeed = 0.3;
             if (e.key === 'ArrowUp') {
-                camRadius = Math.max(2.0, camRadius - zoomSpeed);
+                rightPaddleUpPressed = true;
+                e.preventDefault();
             } else if (e.key === 'ArrowDown') {
-                camRadius = Math.min(100.0, camRadius + zoomSpeed);
+                rightPaddleDownPressed = true;
+                e.preventDefault();
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowUp') {
+                rightPaddleUpPressed = false;
+                e.preventDefault();
+            } else if (e.key === 'ArrowDown') {
+                rightPaddleDownPressed = false;
+                e.preventDefault();
             }
         });
 
         let startTime = Date.now();
         function render() {
             const time = (Date.now() - startTime) / 1000.0;
+
+            if (!lastTimeInitialized) {
+                lastTimeInitialized = true;
+                lastTime = time;
+            }
+            const dt = time - lastTime;
+            lastTime = time;
+
+            // Update paddle position
+            const paddleSpeed = 4.0;
+            if (rightPaddleUpPressed) {
+                rightPaddleY = Math.min(boardTop - paddleHalfHeight, rightPaddleY + paddleSpeed * dt);
+            }
+            if (rightPaddleDownPressed) {
+                rightPaddleY = Math.max(boardBottom + paddleHalfHeight, rightPaddleY - paddleSpeed * dt);
+            }
+
+            // Update ball position and handle collisions
+            ballPosX += ballVelX * dt;
+            ballPosY += ballVelY * dt;
+
+            // Top/bottom bounce
+            if (ballPosY + ballRadius > boardTop) {
+                ballPosY = boardTop - ballRadius;
+                ballVelY *= -1.0;
+            } else if (ballPosY - ballRadius < boardBottom) {
+                ballPosY = boardBottom + ballRadius;
+                ballVelY *= -1.0;
+            }
+
+            // Right paddle collision
+            if (ballVelX > 0.0 &&
+                ballPosX + ballRadius > rightPaddleX - paddleHalfWidth &&
+                ballPosX - ballRadius < rightPaddleX + paddleHalfWidth &&
+                ballPosY + ballRadius > rightPaddleY - paddleHalfHeight &&
+                ballPosY - ballRadius < rightPaddleY + paddleHalfHeight) {
+
+                ballPosX = rightPaddleX - paddleHalfWidth - ballRadius;
+                ballVelX *= -1.0;
+            }
+
+            // Left paddle collision
+            if (ballVelX < 0.0 &&
+                ballPosX - ballRadius < leftPaddleX + paddleHalfWidth &&
+                ballPosX + ballRadius > leftPaddleX - paddleHalfWidth &&
+                ballPosY + ballRadius > leftPaddleY - paddleHalfHeight &&
+                ballPosY - ballRadius < leftPaddleY + paddleHalfHeight) {
+
+                ballPosX = leftPaddleX + paddleHalfWidth + ballRadius;
+                ballVelX *= -1.0;
+            }
+
+            // Out-of-bounds check / reset ball
+            if (ballPosX < -ballOutX || ballPosX > ballOutX) {
+                ballPosX = 0.0;
+                ballPosY = 0.0;
+                ballVelX = 4.0;
+                ballVelY = 2.0;
+            }
 
             gl.viewport(0, 0, canvas.width, canvas.height);
             gl.clearColor(0, 0, 0, 1);
@@ -355,10 +535,28 @@ temp text</p>
             gl.useProgram(program);
             gl.bindVertexArray(vao);
 
+            // Bind ice textures
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, iceHeightTex);
+            gl.activeTexture(gl.TEXTURE1);
+            gl.bindTexture(gl.TEXTURE_2D, iceNormalTex);
+
             gl.uniform2f(resolutionLocation, canvas.width, canvas.height);
             gl.uniform1f(timeLocation, time);
             gl.uniform1i(maxBouncesLocation, maxBounces);
             gl.uniform1f(ambientStrengthLocation, ambientStrength);
+
+            // Paddle uniforms
+            if (leftPaddleYLocation) gl.uniform1f(leftPaddleYLocation, leftPaddleY);
+            if (rightPaddleYLocation) gl.uniform1f(rightPaddleYLocation, rightPaddleY);
+
+            // Ball uniforms
+            if (ballPosLocation) gl.uniform2f(ballPosLocation, ballPosX, ballPosY);
+            if (ballRadiusLocation) gl.uniform1f(ballRadiusLocation, ballRadius);
+
+            // Ice tuning uniforms
+            if (iceBumpStrengthLocation) gl.uniform1f(iceBumpStrengthLocation, iceBumpStrength);
+            if (iceNormalBlendLocation) gl.uniform1f(iceNormalBlendLocation, iceNormalBlend);
 
             if (centerLightColorLocation) gl.uniform3f(
                 centerLightColorLocation,
