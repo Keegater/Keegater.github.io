@@ -138,7 +138,7 @@ void initScene(float time) {
     boxes[2] = Box(
         vec3(0.0, boardTop + borderHalfThickness, 0.0),
         vec3(boardHalfWidth + 2.0, borderHalfThickness, 4),
-        vec3(0.0, 0.0, 0.0),
+        vec3(0.01, 0.01, 0.01),
         MATERIAL_DIFFUSE,
         0.0
     );
@@ -147,7 +147,7 @@ void initScene(float time) {
     boxes[3] = Box(
         vec3(0.0, boardBottom - borderHalfThickness, 0.0),
         vec3(boardHalfWidth + 2.0, borderHalfThickness, 0.25),
-        vec3(0.0, 0.0, 0.0),
+        vec3(0.01, 0.01, 0.01),
         MATERIAL_DIFFUSE,
         0.0
     );

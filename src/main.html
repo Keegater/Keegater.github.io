@@ -133,7 +133,7 @@ temp text</p>
         // Ball state
         let ballPosX = 0.0;
         let ballPosY = 0.0;
-        let ballVelX = 4.0;
+        let ballVelX = 2.0;
         let ballVelY = 2.0;
         const ballRadius = 0.12;
 
@@ -541,6 +541,7 @@ temp text</p>
         function resetBall(){
             ballPosX = 0.0;
             ballPosY = 0.0;
+            ballVelX = 2.0;
         }
 
 
@@ -591,7 +592,7 @@ temp text</p>
                 ballPosY - ballRadius < rightPaddleY + paddleHalfHeight) {
 
                 ballPosX = rightPaddleX - paddleHalfWidth - ballRadius;
-                ballVelX *= -1.0;
+                ballVelX *= -1.1;
             }
 
             // Left paddle collision
@@ -602,7 +603,7 @@ temp text</p>
                 ballPosY - ballRadius < leftPaddleY + paddleHalfHeight) {
 
                 ballPosX = leftPaddleX + paddleHalfWidth + ballRadius;
-                ballVelX *= -1.0;
+                ballVelX *= -1.1;
             }
 
             // // Out-of-bounds check / reset ball
