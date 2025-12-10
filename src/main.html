@@ -37,6 +37,8 @@
 <body>
 
 <h2>CS412 Final Project - Keegan Murphy - Jagat Subedi</h2>
+<h3 id = "scorecard">0 - 0</h3>
+<h3 id = "winner" style= "color:#4ff; height:20px;"></h3>
 <p>Description / instructions <br>
 temp text</p>
 
@@ -121,6 +123,12 @@ temp text</p>
         let rightPaddleDownPressed = false;
         let leftPaddleUpPressed = false;
         let leftPaddleDownPressed = false;
+
+        // Players Score
+        let leftScore = 0;
+        let rightScore = 0;
+        const maxScore = 11;
+        let gameOver = false;
 
         // Ball state
         let ballPosX = 0.0;
@@ -485,6 +493,53 @@ temp text</p>
             }
         });
 
+        function updateScore(){
+            document.getElementById("scorecard").textContent = leftScore + " - " + rightScore;
+        }
+
+        function declareWinner(won){
+            gameOver = true;
+            let message = "";
+            if (won == "left"){
+                message  = "Left Player won the game";
+            }
+            else{
+                message = "Right Player won the game";
+            }
+            document.getElementById("winner").textContent = message;
+        }
+
+        function winnerCheck(){
+            if(gameOver) return;
+
+            if(ballPosX < -ballOutX){
+                rightScore++;
+                updateScore();
+                if (rightScore >= maxScore){
+                    declareWinner("right");
+                }
+                else{
+                    resetBall();
+                }
+            }
+            if(ballPosX > ballOutX){
+                leftScore++;
+                updateScore();
+                if (leftScore >= maxScore){
+                    declareWinner("left");
+                }
+                else{
+                    resetBall();
+                }
+            }
+        }
+
+        function resetBall(){
+            ballPosX = 0.0;
+            ballPosY = 0.0;
+        }
+
+
         let startTime = Date.now();
         function render() {
             const time = (Date.now() - startTime) / 1000.0;
@@ -546,13 +601,14 @@ temp text</p>
                 ballVelX *= -1.0;
             }
 
-            // Out-of-bounds check / reset ball
-            if (ballPosX < -ballOutX || ballPosX > ballOutX) {
-                ballPosX = 0.0;
-                ballPosY = 0.0;
-                ballVelX = 4.0;
-                ballVelY = 2.0;
-            }
+            // // Out-of-bounds check / reset ball
+            // if (ballPosX < -ballOutX || ballPosX > ballOutX) {
+            //     ballPosX = 0.0;
+            //     ballPosY = 0.0;
+            //     ballVelX = 4.0;
+            //     ballVelY = 2.0;
+            // }
+            winnerCheck();
 
             gl.viewport(0, 0, canvas.width, canvas.height);
             gl.clearColor(0, 0, 0, 1);
