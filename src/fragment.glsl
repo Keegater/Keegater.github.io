@@ -33,6 +33,9 @@ const int MATERIAL_REFLECTIVE = 1;
 const int MATERIAL_REFRACTIVE = 2;
 const int MATERIAL_LIGHT = 3;
 
+// Number of light spheres on wall
+const int NUM_LIGHT_SPHERES = 7;
+
 // Ray structure
 struct Ray {
     vec3 origin;
@@ -72,10 +75,10 @@ struct HitData {
 };
 
 // Scene objects
-Sphere spheres[1];          // ball sphere
-Sphere lightSphere;         // not using rn
-Box boxes[4];               // left paddle, right paddle, top/bottom bounds
-Box iceFloor;               // reflective ice floor
+Sphere spheres[1];                 // ball sphere
+Sphere lightSpheres[NUM_LIGHT_SPHERES]; // light spheres
+Box boxes[4];                      // left paddle, right paddle, top/bottom bounds
+Box iceFloor;                      // reflective ice floor
 
 // Initialize scene objects
 void initScene(float time) {
@@ -114,10 +117,27 @@ void initScene(float time) {
     float boardHalfWidth = 4.5;
     float borderHalfThickness = 0.25;
 
+    // Set up light spheres
+    vec3 lightCol = clamp(u_centerLightColor, 0.0, 1.0) * u_centerLightBrightness;
+    float lightsY = boardTop - 0.01;
+    float lightsZ = 1.5;
+    for (int i = 0; i < NUM_LIGHT_SPHERES; i++) {
+        float t = (float(i) + 0.5) / float(NUM_LIGHT_SPHERES);
+        float x = mix(-boardHalfWidth - 1.5, boardHalfWidth + 1.5, t);
+        lightSpheres[i] = Sphere(
+            vec3(x, lightsY, lightsZ),
+            0.08,
+            lightCol,
+            MATERIAL_LIGHT,
+            0.0,
+            1.0
+        );
+    }
+
     // Top border
     boxes[2] = Box(
         vec3(0.0, boardTop + borderHalfThickness, 0.0),
-        vec3(boardHalfWidth + 1.0, borderHalfThickness, 0.25),
+        vec3(boardHalfWidth + 2.0, borderHalfThickness, 4),
         vec3(0.0, 0.0, 0.0),
         MATERIAL_DIFFUSE,
         0.0
@@ -126,7 +146,7 @@ void initScene(float time) {
     // Bottom border
     boxes[3] = Box(
         vec3(0.0, boardBottom - borderHalfThickness, 0.0),
-        vec3(boardHalfWidth + 1.0, borderHalfThickness, 0.25),
+        vec3(boardHalfWidth + 2.0, borderHalfThickness, 0.25),
         vec3(0.0, 0.0, 0.0),
         MATERIAL_DIFFUSE,
         0.0
@@ -135,7 +155,7 @@ void initScene(float time) {
     // Ice floor
     iceFloor = Box(
         vec3(0.0, 0.0, -0.8),
-        vec3(boardHalfWidth + 1.0, (boardTop - boardBottom) * 0.55, 0.6),
+        vec3(boardHalfWidth + 2.0, (boardTop - boardBottom) * 0.55, 0.6),
         vec3(0.1, 0.45, 0.8),
         MATERIAL_REFLECTIVE,
         0.6
@@ -262,26 +282,27 @@ HitData traceScene(Ray ray, bool includeLightSphere) {
     HitData closest;
     closest.hit = false;
     closest.t = 1e10;
-/*
+
     // Light sphere intersection
     if (includeLightSphere) {
-        float t;
-        if (intersectSphere(ray, lightSphere, t)) {
-            if (t < closest.t) {
-                closest.hit = true;
-                closest.t = t;
-                closest.point = ray.origin + t * ray.direction;
-                vec3 n = normalize(closest.point - lightSphere.center);
-                closest.frontFace = dot(ray.direction, n) < 0.0;
-                closest.normal = closest.frontFace ? n : -n;
-                closest.color = lightSphere.color;
-                closest.material = lightSphere.material;
-                closest.reflectivity = lightSphere.reflectivity;
-                closest.refractiveIndex = lightSphere.refractiveIndex;
+        for (int i = 0; i < NUM_LIGHT_SPHERES; i++) {
+            float t;
+            if (intersectSphere(ray, lightSpheres[i], t)) {
+                if (t < closest.t) {
+                    closest.hit = true;
+                    closest.t = t;
+                    closest.point = ray.origin + t * ray.direction;
+                    vec3 n = normalize(closest.point - lightSpheres[i].center);
+                    closest.frontFace = dot(ray.direction, n) < 0.0;
+                    closest.normal = closest.frontFace ? n : -n;
+                    closest.color = lightSpheres[i].color;
+                    closest.material = lightSpheres[i].material;
+                    closest.reflectivity = lightSpheres[i].reflectivity;
+                    closest.refractiveIndex = lightSpheres[i].refractiveIndex;
+                }
             }
         }
     }
-    */
 
     // Box intersections
     for (int i = 0; i < 4; i++) {
@@ -358,53 +379,55 @@ vec3 trace(Ray ray, int maxDepth) {
     for (int depth = 0; depth < 8; depth++) {
         if (depth >= maxDepth) break;
 
-/*
+        // Check if ray hits a light sphere
         HitData lightHit = traceScene(ray, true);
         if (lightHit.hit && lightHit.material == MATERIAL_LIGHT) {
             color += attenuation * lightHit.color;
             break;
         }
-*/
 
+        // Trace only non-light geometry
         HitData hit = traceScene(ray, false);
 
         if (!hit.hit) {
-            // No hit
-            vec3 skyColor = vec3(0.047, 0.047, 0.047);
+            // No hit, gradient sky
+            vec3 unitDir = normalize(ray.direction);
+            float tEnv = 0.5 * (unitDir.z + 1.0);
+            tEnv = clamp(tEnv, 0.0, 1.0);
+            vec3 skyColor = mix(vec3(0.005, 0.005, 0.01), vec3(0.04, 0.07, 0.10), tEnv);
+
             color += attenuation * skyColor;
             break;
         }
-/*
-        // Lighting from central light sphere
+
+        // Direct lighting from the light spheres
         vec3 viewDir = normalize(-ray.direction);
-        vec3 lightDir1 = normalize(lightSphere.center - hit.point);
-        float lightDist1 = length(lightSphere.center - hit.point);
-
-        Ray shadowRay1 = Ray(hit.point + lightDir1 * 0.001, lightDir1);
-        HitData shadowHit1 = traceScene(shadowRay1, false);
-        bool inShadow1 = shadowHit1.hit && shadowHit1.t < lightDist1 - 0.001;
-
-        float diff1 = max(dot(hit.normal, lightDir1), 0.0);
-        vec3 halfDir1 = normalize(lightDir1 + viewDir);
-        float spec1 = pow(max(dot(hit.normal, halfDir1), 0.0), 64.0);
-        vec3 lightColor1 = lightSphere.color;
-
-        vec3 contrib1 = vec3(0.0);
-        if (!inShadow1) {
-            contrib1 = hit.color * diff1 * lightColor1 + spec1 * lightColor1;
-        }
-
-        vec3 directLight = contrib1;
-*/
-        vec3 lightDir = normalize(vec3(1.0, 1.0, 0.8));
-        vec3 lightColor = vec3(1.0, 1.0, 1.0);
-
-        float diff = max(dot(hit.normal, lightDir), 0.0);
-        vec3 directLight = diff * lightColor;
-
+        vec3 directLight = vec3(0.0);
         vec3 ambientLight = u_ambientStrength * hit.color;
 
+        for (int i = 0; i < NUM_LIGHT_SPHERES; i++) {
+            vec3 lightPos = lightSpheres[i].center;
+            vec3 lightColor = lightSpheres[i].color;
+
+            vec3 toLight = lightPos - hit.point;
+            float lightDist = length(toLight);
+            vec3 lightDir = toLight / max(lightDist, 0.0001);
+
+            // Shadow ray - block light if an object is between the point and the light
+            Ray shadowRay = Ray(hit.point + lightDir * 0.001, lightDir);
+            HitData shadowHit = traceScene(shadowRay, false);
+            bool inShadow = shadowHit.hit && shadowHit.t < lightDist;
+
+            if (!inShadow) {
+                float diff = max(dot(hit.normal, lightDir), 0.0);
+                vec3 halfDir = normalize(lightDir + viewDir);
+                float spec = pow(max(dot(hit.normal, halfDir), 0.0), 64.0);
+                directLight += hit.color * diff * lightColor + spec * lightColor;
+            }
+        }
+
         if (hit.material == MATERIAL_DIFFUSE) {
+            // Local illumination only (no more bounces)
             vec3 lighting = directLight + ambientLight;
             color += attenuation * lighting;
             break;
@@ -426,14 +449,13 @@ vec3 trace(Ray ray, int maxDepth) {
             attenuation *= hit.color;
 
         } else if (hit.material == MATERIAL_REFLECTIVE) {
-            // Ice floor
-            vec3 glowColor = u_centerLightColor * u_centerLightBrightness * 0.15;
-            color += attenuation * (0.02 * directLight + 0.02 * ambientLight + glowColor);
+            // Ice Floor
+            color += attenuation * (0.02 * directLight + 0.02 * ambientLight);
             attenuation *= hit.reflectivity;
             ray = Ray(hit.point + hit.normal * 0.001, reflect(ray.direction, hit.normal));
 
         } else {
-            // Fallback for other reflective materials
+            // Fallback for other refractive materials
             color += attenuation * (0.02 * directLight + 0.02 * ambientLight);
             attenuation *= hit.reflectivity;
             ray = Ray(hit.point + hit.normal * 0.001, reflect(ray.direction, hit.normal));
