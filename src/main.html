@@ -111,8 +111,8 @@ temp text</p>
         let vao, positionBuffer;
 
         // Central light UI
-        let centerLightColor = [0.56, 1.0, 1.0];
-        let centerLightBrightness = 0.80; // 0 -> 10
+        let centerLightColor = [0.88, 0.34, 0.13];
+        let centerLightBrightness = 1.7; // 0 -> 10
 
         // Paddle positions (center = 0)
         let leftPaddleY = 0.0;
@@ -250,7 +250,7 @@ temp text</p>
         initShaderProgram();
 
 
-        let maxBounces = 8;
+        let maxBounces = 16;
         let ambientStrength = 0.80; // mapped 1000 -> 1)
 
 
@@ -258,7 +258,7 @@ temp text</p>
         let camTarget = [0.0, 0.0, 0.0];
         let camRadius = 12.0;   // distance from center
         let camTheta = 0.0;    // horizontal angle (rads)
-        let camPhi = 0.0;      // vertical angle (rads)
+        let camPhi = -0.8;      // vertical angle (rads)
 
         // Vector helpers
         function normalize3(v) {
@@ -325,7 +325,7 @@ temp text</p>
         const bouncesSlider = document.createElement('input');
         bouncesSlider.type = 'range';
         bouncesSlider.min = '1';
-        bouncesSlider.max = '8';
+        bouncesSlider.max = '16';
         bouncesSlider.value = String(maxBounces);
         const bouncesValue = document.createElement('span');
         bouncesValue.textContent = ' ' + maxBounces;
@@ -367,7 +367,7 @@ temp text</p>
         cameraHomeButton.addEventListener('click', () => {
             camRadius = 12.0;
             camTheta = 0.0;
-            camPhi = 0.0;
+            camPhi = -0.8;
         });
         controls.appendChild(cameraHomeButton);
 
@@ -393,16 +393,16 @@ temp text</p>
         }
 
         // Center light controls
-        addOrbitLightSlider('Center light R', 0, 255, 255, (v) => {
+        addOrbitLightSlider('Wall lights R', 0, 255, 255, (v) => {
             centerLightColor[0] = v / 255.0;
         });
-        addOrbitLightSlider('Center light G', 0, 255, 237, (v) => {
+        addOrbitLightSlider('Wall lights G', 0, 255, 237, (v) => {
             centerLightColor[1] = v / 255.0;
         });
-        addOrbitLightSlider('Center light B', 0, 255, 204, (v) => {
+        addOrbitLightSlider('Wall lights B', 0, 255, 204, (v) => {
             centerLightColor[2] = v / 255.0;
         });
-        addOrbitLightSlider('Center light brightness', 0, 1000, Math.round(centerLightBrightness * 100), (v) => {
+        addOrbitLightSlider('Wall lights brightness', 0, 1000, Math.round(centerLightBrightness * 100), (v) => {
             centerLightBrightness = v / 100.0; // 0->1000 to 0->10
         });
 
