@@ -85,16 +85,16 @@ temp text</p>
         }
 
         // Load ice textures
-        loadIceTexture(iceHeightTex, '../resources/Blue_Ice_001_DISP.png');
-        loadIceTexture(iceNormalTex, '../resources/Blue_Ice_001_NORM.jpg');
+        loadIceTexture(iceHeightTex, 'resources/Blue_Ice_001_DISP.png');
+        loadIceTexture(iceNormalTex, 'resources/Blue_Ice_001_NORM.jpg');
 
-        const vertexShaderSource = await fetch('vertex.glsl').then((res) => {
+        const vertexShaderSource = await fetch('src/vertex.glsl').then((res) => {
             if (!res.ok) {
                 throw new Error('Failed to load vertex.glsl: ' + res.status + ' ' + res.statusText);
             }
             return res.text();
         });
-        const fragmentShaderSource = await fetch('fragment.glsl').then((res) => {
+        const fragmentShaderSource = await fetch('src/fragment.glsl').then((res) => {
             if (!res.ok) {
                 throw new Error('Failed to load fragment.glsl: ' + res.status + ' ' + res.statusText);
             }
