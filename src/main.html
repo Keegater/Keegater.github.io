@@ -119,6 +119,8 @@ temp text</p>
         // Paddle input states (smooth movement)
         let rightPaddleUpPressed = false;
         let rightPaddleDownPressed = false;
+        let leftPaddleUpPressed = false;
+        let leftPaddleDownPressed = false;
 
         // Ball state
         let ballPosX = 0.0;
@@ -449,7 +451,16 @@ temp text</p>
             if (e.key === 'ArrowUp') {
                 rightPaddleUpPressed = true;
                 e.preventDefault();
-            } else if (e.key === 'ArrowDown') {
+            }
+            else if (e.key === 'w') {
+                leftPaddleUpPressed = true;
+                e.preventDefault();
+            } 
+            else if (e.key === 's') {
+                leftPaddleDownPressed = true;
+                e.preventDefault();
+            }
+            else if (e.key === 'ArrowDown') {
                 rightPaddleDownPressed = true;
                 e.preventDefault();
             }
@@ -459,8 +470,17 @@ temp text</p>
             if (e.key === 'ArrowUp') {
                 rightPaddleUpPressed = false;
                 e.preventDefault();
-            } else if (e.key === 'ArrowDown') {
+            } 
+            else if (e.key === 'ArrowDown') {
                 rightPaddleDownPressed = false;
+                e.preventDefault();
+            }
+            else if (e.key === 'w') {
+                leftPaddleUpPressed = false;
+                e.preventDefault();
+            }
+            else if (e.key === 's') {
+                leftPaddleDownPressed = false;
                 e.preventDefault();
             }
         });
@@ -483,6 +503,12 @@ temp text</p>
             }
             if (rightPaddleDownPressed) {
                 rightPaddleY = Math.max(boardBottom + paddleHalfHeight, rightPaddleY - paddleSpeed * dt);
+            }
+            if (leftPaddleUpPressed) {
+                leftPaddleY = Math.min(boardTop - paddleHalfHeight, leftPaddleY + paddleSpeed * dt);
+            }
+            if (leftPaddleDownPressed) {
+                leftPaddleY = Math.max(boardBottom + paddleHalfHeight, leftPaddleY - paddleSpeed * dt);
             }
 
             // Update ball position and handle collisions
