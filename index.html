@@ -47,6 +47,7 @@ temp text</p>
         <canvas id="glCanvas" width="800" height="600"></canvas>
     </div>
 </div>
+
     
 
 <script>
@@ -319,6 +320,28 @@ temp text</p>
         // Camera lock state
         let cameraLocked = false;
 
+        const modeLabel = document.createElement('label');
+        modeLabel.textContent = 'Game Mode: ';
+
+        const modeSelect = document.createElement('select');
+        const singleOption = document.createElement('option');
+        singleOption.value = 'single';
+        singleOption.textContent = 'Single Player';
+        const multiOption = document.createElement('option');
+        multiOption.value = 'multi';
+        multiOption.textContent = 'Multiplayer';
+        modeSelect.appendChild(singleOption);
+        modeSelect.appendChild(multiOption);
+
+        modeLabel.appendChild(modeSelect);
+        controls.appendChild(modeLabel);
+
+        let gameMode = 'single';
+
+        modeSelect.addEventListener('change', () => {
+            gameMode = modeSelect.value;
+        });
+
         // Max bounce slider
         const bouncesLabel = document.createElement('label');
         bouncesLabel.textContent = 'Max bounces ';
@@ -456,6 +479,22 @@ temp text</p>
 
         // Paddle controls
         window.addEventListener('keydown', (e) => {
+            if (gameMode == "multi") {
+                multiplayerDown(e);
+            }
+            else{
+                if (e.key === 'ArrowUp') {
+                    rightPaddleUpPressed = true;
+                    e.preventDefault();
+                }
+                else if (e.key === 'ArrowDown') {
+                    rightPaddleDownPressed = true;
+                    e.preventDefault();
+                }
+            }
+        });
+
+        function multiplayerDown(e){
             if (e.key === 'ArrowUp') {
                 rightPaddleUpPressed = true;
                 e.preventDefault();
@@ -472,7 +511,33 @@ temp text</p>
                 rightPaddleDownPressed = true;
                 e.preventDefault();
             }
-        });
+        }
+
+        function singlePlayer(dt){
+            const speed = 3;
+            if (ballVelX < 0.0) {
+                // if ball is above paddle, move up
+                if (ballPosY > leftPaddleY) {
+                    leftPaddleY = Math.min(boardTop - paddleHalfHeight, leftPaddleY + speed * dt);
+                }
+
+                // If ball below paddle, move down
+                else if (ballPosY < leftPaddleY) {
+                    leftPaddleY = Math.max(boardBottom + paddleHalfHeight, leftPaddleY - speed * dt);
+                }
+            }   
+
+            // If ball is moving away, return to center
+            else {
+                const center = 0.0;
+                if (leftPaddleY < center) {
+                    leftPaddleY += speed * dt * 0.5;
+                }
+                else if (leftPaddleY > center) {
+                    leftPaddleY -= speed * dt * 0.5;
+                }
+            }
+        }
 
         window.addEventListener('keyup', (e) => {
             if (e.key === 'ArrowUp') {
@@ -493,10 +558,12 @@ temp text</p>
             }
         });
 
+
         //scorecard regulation
         function updateScore(){
             document.getElementById("scorecard").textContent = leftScore + " - " + rightScore;
         }
+        
         // display who won
         function declareWinner(won){
             gameOver = true;
@@ -575,6 +642,10 @@ temp text</p>
             ballPosX += ballVelX * dt;
             ballPosY += ballVelY * dt;
 
+            if(gameMode == "single"){
+                singlePlayer(dt);
+            }
+
             // Top/bottom bounce
             if (ballPosY + ballRadius > boardTop) {
                 ballPosY = boardTop - ballRadius;
@@ -606,13 +677,7 @@ temp text</p>
                 ballVelX *= -1.1;
             }
 
-            // // Out-of-bounds check / reset ball
-            // if (ballPosX < -ballOutX || ballPosX > ballOutX) {
-            //     ballPosX = 0.0;
-            //     ballPosY = 0.0;
-            //     ballVelX = 4.0;
-            //     ballVelY = 2.0;
-            // }
+
             winnerCheck();
 
             gl.viewport(0, 0, canvas.width, canvas.height);
@@ -653,6 +718,7 @@ temp text</p>
                 centerLightBrightnessLocation,
                 centerLightBrightness
             );
+
 
             updateCameraUniforms();
 
