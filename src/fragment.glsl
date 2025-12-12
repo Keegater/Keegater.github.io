@@ -22,6 +22,7 @@ uniform vec2  u_ballPos;
 uniform float u_ballRadius;
 uniform sampler2D u_iceHeightMap;
 uniform sampler2D u_iceNormalMap;
+uniform sampler2D u_lavaTexture;
 uniform float    u_iceBumpStrength;
 uniform float    u_iceNormalBlend;
 
@@ -59,6 +60,7 @@ struct Box {
     vec3 color;
     int material;
     float reflectivity;
+    bool isLava;
 };
 
 // Hit record structure
@@ -72,6 +74,7 @@ struct HitData {
     float reflectivity;
     float refractiveIndex;
     bool frontFace;
+    bool isLava;
 };
 
 // Scene objects
@@ -99,7 +102,8 @@ void initScene(float time) {
         vec3(0.05, 0.5, 0.2),
         vec3(0.8, 0.8, 0.8),
         MATERIAL_DIFFUSE,
-        0.0
+        0.0,
+        false
     );
 
     // Right paddle (player)
@@ -108,7 +112,8 @@ void initScene(float time) {
         vec3(0.05, 0.5, 0.2),
         vec3(0.8, 0.8, 0.8),
         MATERIAL_DIFFUSE,
-        0.0
+        0.0,
+        false
     );
 
     // Bound boards top and bottom
@@ -140,7 +145,8 @@ void initScene(float time) {
         vec3(boardHalfWidth + 2.0, borderHalfThickness, 4),
         vec3(0.01, 0.01, 0.01),
         MATERIAL_DIFFUSE,
-        0.0
+        0.0,
+        true
     );
 
     // Bottom border
@@ -149,7 +155,8 @@ void initScene(float time) {
         vec3(boardHalfWidth + 2.0, borderHalfThickness, 0.25),
         vec3(0.01, 0.01, 0.01),
         MATERIAL_DIFFUSE,
-        0.0
+        0.0,
+        false
     );
 
     // Ice floor
@@ -158,7 +165,8 @@ void initScene(float time) {
         vec3(boardHalfWidth + 2.0, (boardTop - boardBottom) * 0.55, 0.6),
         vec3(0.1, 0.45, 0.8),
         MATERIAL_REFLECTIVE,
-        0.6
+        0.6,
+        false
     );
 
 }
@@ -278,10 +286,18 @@ vec3 iceBumpNormal(vec3 worldPos) {
     return n;
 }
 
+vec3 lavaColor(vec3 worldPos) {
+    vec2 uv = vec2(worldPos.x * 0.12 + u_time * 0.08,
+                   worldPos.z * 0.18 + u_time * 0.03);
+    uv = fract(uv);
+    return texture(u_lavaTexture, uv).rgb;
+}
+
 HitData traceScene(Ray ray, bool includeLightSphere) {
     HitData closest;
     closest.hit = false;
     closest.t = 1e10;
+    closest.isLava = false;
 
     // Light sphere intersection
     if (includeLightSphere) {
@@ -299,6 +315,7 @@ HitData traceScene(Ray ray, bool includeLightSphere) {
                     closest.material = lightSpheres[i].material;
                     closest.reflectivity = lightSpheres[i].reflectivity;
                     closest.refractiveIndex = lightSpheres[i].refractiveIndex;
+                    closest.isLava = false;
                 }
             }
         }
@@ -319,6 +336,7 @@ HitData traceScene(Ray ray, bool includeLightSphere) {
                 closest.material = boxes[i].material;
                 closest.reflectivity = boxes[i].reflectivity;
                 closest.refractiveIndex = 1.0;
+                closest.isLava = boxes[i].isLava;
             }
         }
     }
@@ -337,6 +355,7 @@ HitData traceScene(Ray ray, bool includeLightSphere) {
             closest.material = spheres[0].material;
             closest.reflectivity = spheres[0].reflectivity;
             closest.refractiveIndex = spheres[0].refractiveIndex;
+            closest.isLava = false;
         }
     }
 
@@ -354,6 +373,7 @@ HitData traceScene(Ray ray, bool includeLightSphere) {
             closest.material = iceFloor.material;
             closest.reflectivity = iceFloor.reflectivity;
             closest.refractiveIndex = 1.0;
+            closest.isLava = false;
         }
     }
 
@@ -401,9 +421,14 @@ vec3 trace(Ray ray, int maxDepth) {
         }
 
         // Direct lighting from the light spheres
+        vec3 surfaceColor = hit.color;
+        if (hit.isLava) {
+            surfaceColor = lavaColor(hit.point);
+        }
+
         vec3 viewDir = normalize(-ray.direction);
         vec3 directLight = vec3(0.0);
-        vec3 ambientLight = u_ambientStrength * hit.color;
+        vec3 ambientLight = u_ambientStrength * surfaceColor;
 
         for (int i = 0; i < NUM_LIGHT_SPHERES; i++) {
             vec3 lightPos = lightSpheres[i].center;
@@ -422,13 +447,16 @@ vec3 trace(Ray ray, int maxDepth) {
                 float diff = max(dot(hit.normal, lightDir), 0.0);
                 vec3 halfDir = normalize(lightDir + viewDir);
                 float spec = pow(max(dot(hit.normal, halfDir), 0.0), 64.0);
-                directLight += hit.color * diff * lightColor + spec * lightColor;
+                directLight += surfaceColor * diff * lightColor + spec * lightColor;
             }
         }
 
         if (hit.material == MATERIAL_DIFFUSE) {
             // Local illumination only (no more bounces)
             vec3 lighting = directLight + ambientLight;
+            if (hit.isLava) {
+                lighting += surfaceColor * 0.2;
+            }
             color += attenuation * lighting;
             break;
 

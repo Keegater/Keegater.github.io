@@ -72,7 +72,13 @@ In Multiplayer mode use arrow up/down to control right paddle and 'w'/'s' to con
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0,
             gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([128, 128, 255, 255]));
 
-        function loadIceTexture(tex, url) {
+        // Lava texture
+        const lavaTex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, lavaTex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0,
+            gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255, 100, 0, 255]));
+
+        function loadTexture(tex, url) {
             const img = new Image();
             img.onload = function() {
                 gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -86,9 +92,10 @@ In Multiplayer mode use arrow up/down to control right paddle and 'w'/'s' to con
             img.src = url;
         }
 
-        // Load ice textures
-        loadIceTexture(iceHeightTex, 'resources/Blue_Ice_001_DISP.png');
-        loadIceTexture(iceNormalTex, 'resources/Blue_Ice_001_NORM.jpg');
+        // Load scene textures
+        loadTexture(iceHeightTex, 'resources/Blue_Ice_001_DISP.png');
+        loadTexture(iceNormalTex, 'resources/Blue_Ice_001_NORM.jpg');
+        loadTexture(lavaTex, 'resources/lava.png');
 
         const vertexShaderSource = await fetch('src/vertex.glsl').then((res) => {
             if (!res.ok) {
@@ -108,7 +115,7 @@ In Multiplayer mode use arrow up/down to control right paddle and 'w'/'s' to con
         let centerLightColorLocation, centerLightBrightnessLocation;
         let leftPaddleYLocation, rightPaddleYLocation;
         let ballPosLocation, ballRadiusLocation;
-        let iceHeightMapLocation, iceNormalMapLocation;
+        let iceHeightMapLocation, iceNormalMapLocation, lavaTextureLocation;
         let iceBumpStrengthLocation, iceNormalBlendLocation;
         let vao, positionBuffer;
 
@@ -234,12 +241,14 @@ In Multiplayer mode use arrow up/down to control right paddle and 'w'/'s' to con
                 // Ice texture uniforms
                 iceHeightMapLocation = gl.getUniformLocation(program, 'u_iceHeightMap');
                 iceNormalMapLocation = gl.getUniformLocation(program, 'u_iceNormalMap');
+                lavaTextureLocation = gl.getUniformLocation(program, 'u_lavaTexture');
                 iceBumpStrengthLocation = gl.getUniformLocation(program, 'u_iceBumpStrength');
                 iceNormalBlendLocation = gl.getUniformLocation(program, 'u_iceNormalBlend');
 
                 // Bind samplers to texture units 0 and 1
                 if (iceHeightMapLocation) gl.uniform1i(iceHeightMapLocation, 0);
                 if (iceNormalMapLocation) gl.uniform1i(iceNormalMapLocation, 1);
+                if (lavaTextureLocation) gl.uniform1i(lavaTextureLocation, 2);
                 if (iceBumpStrengthLocation) gl.uniform1f(iceBumpStrengthLocation, iceBumpStrength);
                 if (iceNormalBlendLocation) gl.uniform1f(iceNormalBlendLocation, iceNormalBlend);
 
@@ -693,6 +702,8 @@ In Multiplayer mode use arrow up/down to control right paddle and 'w'/'s' to con
             gl.bindTexture(gl.TEXTURE_2D, iceHeightTex);
             gl.activeTexture(gl.TEXTURE1);
             gl.bindTexture(gl.TEXTURE_2D, iceNormalTex);
+            gl.activeTexture(gl.TEXTURE2);
+            gl.bindTexture(gl.TEXTURE_2D, lavaTex);
 
             gl.uniform2f(resolutionLocation, canvas.width, canvas.height);
             gl.uniform1f(timeLocation, time);
